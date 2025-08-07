@@ -1,0 +1,34 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnpm
+/pnpm-lock.yaml
+
+# local env files
+.env*.local
+
+# build output
+/.next/
+/out/
+
+# vercel
+/.vercel
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# turbo
+.turbo
+
+# my-v0-project specific
+argo-biomechanics-mvp.zip
+supabase_schema.sql
+supabase_seed.sql

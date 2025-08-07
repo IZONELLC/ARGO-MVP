@@ -1,80 +1,66 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { User, Video, Clock, Play } from 'lucide-react'
-
-interface Client {
-  id: string
-  name: string
-  weeklyProgress: number
-  pendingVideos: number
-  correctedVideos: number
-}
-
-interface VideoData {
-  id: string
-  clientId: string
-  clientName: string
-  exercise: string
-  angle: string
-  uploadDate: string
-  status: "pending" | "corrected" | "needs_improvement"
-  week: number
-  day: number
-}
+import { User, Video, Play } from 'lucide-react'
+import Link from "next/link"
 
 interface CoachDashboardProps {
   onCorrectVideo: (videoId: string) => void
 }
 
 export function CoachDashboard({ onCorrectVideo }: CoachDashboardProps) {
-  // Mock data - minimal for MVP
-  const clients: Client[] = [
-    {
-      id: "1",
-      name: "Carlos Rodriguez",
-      weeklyProgress: 75,
-      pendingVideos: 3,
-      correctedVideos: 9
-    },
-    {
-      id: "2", 
-      name: "María González",
-      weeklyProgress: 60,
-      pendingVideos: 2,
-      correctedVideos: 5
-    }
-  ]
+  const { user } = useAuth();
+  const [clients, setClients] = useState<any[]>([]);
+  const [pendingVideos, setPendingVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const pendingVideos: VideoData[] = [
-    {
-      id: "v1",
-      clientId: "1",
-      clientName: "Carlos Rodriguez",
-      exercise: "Sentadilla",
-      angle: "sagital",
-      uploadDate: "2024-01-22",
-      status: "pending",
-      week: 1,
-      day: 1
-    },
-    {
-      id: "v2",
-      clientId: "2",
-      clientName: "María González", 
-      exercise: "Press de Banca",
-      angle: "frontal",
-      uploadDate: "2024-01-22",
-      status: "pending",
-      week: 1,
-      day: 2
-    }
-  ]
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+      setLoading(true);
 
-  const totalPending = clients.reduce((acc, client) => acc + client.pendingVideos, 0)
+      // Fetch clients of the coach
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select(`*, profiles(full_name)`)
+        .eq('coach_id', user.id);
+
+      if (clientError) {
+        console.error("Error fetching clients:", clientError);
+      } else {
+        setClients(clientData || []);
+      }
+
+      // Fetch pending videos for those clients
+      if (clientData && clientData.length > 0) {
+        const clientIds = clientData.map(c => c.id);
+        const { data: videoData, error: videoError } = await supabase
+          .from('videos')
+          .select(`*, clients(profiles(full_name)), exercises(name)`)
+          .in('client_id', clientIds)
+          .eq('status', 'pending_correction');
+
+        if (videoError) {
+          console.error("Error fetching videos:", videoError);
+        } else {
+          setPendingVideos(videoData || []);
+        }
+      }
+      setLoading(false);
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  if (loading) {
+    return <div className="text-center p-8">Loading dashboard...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -89,14 +75,14 @@ export function CoachDashboard({ onCorrectVideo }: CoachDashboardProps) {
         
         <Card>
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-orange-600">{totalPending}</div>
+            <div className="text-2xl font-bold text-orange-600">{pendingVideos.length}</div>
             <div className="text-sm text-gray-600">Por Corregir</div>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold">8.5</div>
+            <div className="text-2xl font-bold">N/A</div>
             <div className="text-sm text-gray-600">Min/Video</div>
           </CardContent>
         </Card>
@@ -111,9 +97,9 @@ export function CoachDashboard({ onCorrectVideo }: CoachDashboardProps) {
           {pendingVideos.map((video) => (
             <div key={video.id} className="flex items-center justify-between p-3 border rounded-lg">
               <div>
-                <div className="font-medium">{video.clientName}</div>
+                <div className="font-medium">{video.clients.profiles.full_name}</div>
                 <div className="text-sm text-gray-600">
-                  {video.exercise} • {video.angle} • Semana {video.week}, Día {video.day}
+                  {video.exercises.name} • {video.angle || 'N/A'} • Semana {video.microciclo || 'N/A'}, Sesion {video.sesion || 'N/A'}
                 </div>
               </div>
               <Button
@@ -148,20 +134,11 @@ export function CoachDashboard({ onCorrectVideo }: CoachDashboardProps) {
                   <User className="h-5 w-5 text-gray-600" />
                 </div>
                 <div>
-                  <div className="font-medium">{client.name}</div>
-                  <div className="text-sm text-gray-600">
-                    {client.weeklyProgress}% progreso semanal
-                  </div>
+                  <div className="font-medium">{client.profiles.full_name}</div>
+                  {/* Placeholder for progress */}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm">
-                  <span className="text-orange-600 font-medium">{client.pendingVideos}</span> pendientes
-                </div>
-                <div className="text-sm text-gray-600">
-                  {client.correctedVideos} corregidos
-                </div>
-              </div>
+              {/* Placeholder for stats */}
             </div>
           ))}
         </CardContent>

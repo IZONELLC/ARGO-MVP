@@ -1,61 +1,50 @@
 "use client"
 
-import { useState } from "react"
-import { CoachDashboard } from "@/components/coach-dashboard"
-import { ClientVideoUpload } from "@/components/client-video-upload"
-import { VideoCorrection } from "@/components/video-correction"
-import { Button } from "@/components/ui/button"
-import { User, Video } from 'lucide-react'
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/auth-provider';
+import { CoachDashboard } from "@/components/coach-dashboard";
+import { Sidebar } from '@/components/sidebar';
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<"coach" | "client" | "correction">("coach")
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
+  const { profile, loading, session } = useAuth();
+  const router = useRouter();
 
+  useEffect(() => {
+    if (!loading) {
+      if (!session) {
+        router.push('/login');
+      } else if (profile) {
+        if (profile.role === 'trainee') {
+          router.push('/client/dashboard');
+        }
+        // If the role is 'coach', they stay on this page.
+      }
+    }
+  }, [loading, session, profile, router]);
+
+  if (loading || !session || profile?.role !== 'coach') {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#121212]">
+        <p className="text-white">Loading...</p>
+      </div>
+    );
+  }
+
+  // Coach View
   return (
-    <div className="min-h-screen bg-white">
-      {/* Simple Header */}
-      <div className="border-b border-gray-200 bg-white sticky top-0 z-50">
-        <div className="flex items-center justify-between p-4">
-          <h1 className="text-xl font-bold text-black">ARGO</h1>
-          <div className="flex space-x-2">
-            <Button
-              variant={activeView === "coach" ? "default" : "outline"}
-              size="mobile"
-              onClick={() => setActiveView("coach")}
-            >
-              <User className="h-4 w-4 mr-2" />
-              Coach
-            </Button>
-            <Button
-              variant={activeView === "client" ? "default" : "outline"}
-              size="mobile"
-              onClick={() => setActiveView("client")}
-            >
-              <Video className="h-4 w-4 mr-2" />
-              Cliente
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="p-4">
-        {activeView === "coach" && (
-          <CoachDashboard 
-            onCorrectVideo={(videoId) => {
-              setSelectedVideo(videoId)
-              setActiveView("correction")
-            }} 
-          />
-        )}
-        {activeView === "client" && <ClientVideoUpload />}
-        {activeView === "correction" && (
-          <VideoCorrection 
-            videoId={selectedVideo}
-            onBack={() => setActiveView("coach")} 
-          />
-        )}
-      </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <Sidebar />
+      <main className="lg:pl-64">
+         <div className="p-6 lg:p-8">
+            <CoachDashboard
+                onCorrectVideo={(videoId) => {
+                    // This will be replaced with the new analysis page link
+                    router.push(`/analysis/coach-id/${profile.id}/${videoId}/exercise-name`);
+                }}
+            />
+         </div>
+      </main>
     </div>
-  )
+  );
 }

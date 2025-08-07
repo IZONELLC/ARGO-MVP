@@ -20,6 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 
 interface AnalysisToolsProps {
+  videoId: string;
   exerciseData?: {
     exercise: string
     previousSessions: Array<{
@@ -79,15 +80,43 @@ export function AnalysisTools({ exerciseData }: AnalysisToolsProps) {
     setIsConfirmDialogOpen(true)
   }
 
-  const handleConfirmAction = () => {
-    console.log("Action confirmed:", {
-      action: actionType,
-      feedback: feedbackOption,
-      rir: rir,
-    })
-    setIsConfirmDialogOpen(false)
-    setFeedbackOption(null)
-    // Here you would typically send this data to your backend
+  const handleConfirmAction = async () => {
+    if (!actionType) return;
+
+    // 1. Update the video status
+    const newStatus = actionType === 'finish' ? 'corrected' : 're_recording_requested';
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({ status: newStatus })
+      .eq('id', videoId);
+
+    if (videoError) {
+      console.error("Error updating video status:", videoError);
+      // Handle error state
+      return;
+    }
+
+    // 2. Save the final feedback
+    // In a real app, you'd also get the coach's ID from the session
+    const { error: feedbackError } = await supabase
+        .from('final_feedback')
+        .insert({
+            video_id: videoId,
+            // coach_id: user.id, // from useAuth()
+            feedback_option: feedbackOption,
+            coach_rir_estimation: rir
+        });
+
+    if (feedbackError) {
+        console.error("Error saving final feedback:", feedbackError);
+        // Handle error state
+        return;
+    }
+
+
+    setIsConfirmDialogOpen(false);
+    setFeedbackOption(null);
+    // Optionally, navigate away or show a success message
   }
 
   const feedbackOptions = [

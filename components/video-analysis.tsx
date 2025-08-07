@@ -25,6 +25,7 @@ import { CommentSystem } from "@/components/comment-system"
 import { AnalysisTools } from "@/components/analysis-tools"
 import { VideoComparison } from "@/components/video-comparison"
 import { Sidebar } from "@/components/sidebar"
+import { supabase } from "@/lib/supabase"
 import { Play, Pause, RotateCcw, Volume2, Maximize, ChevronLeft, ChevronRight, Pencil, Eraser, Ruler, Type, Mic, MessageSquare, BarChart3, GitCompare, User, Calendar, Dumbbell, Weight, RotateCw, Target } from 'lucide-react'
 
 interface VideoData {
@@ -47,36 +48,63 @@ interface VideoAnalysisProps {
     clientId: string
     date: string
     exercise: string
-  }
+  },
+  isReadOnly?: boolean;
+  videoId?: string;
 }
 
-export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
-  const { clientId, date, exercise } = analysisParams;
+export function VideoAnalysis({ analysisParams, isReadOnly = false, videoId }: VideoAnalysisProps) {
+  const router = useRouter();
+  const [videoData, setVideoData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Helper to format the date string (e.g., 22012024) to a readable format
-  const formatDate = (dateStr: string) => {
-    const year = dateStr.substring(4);
-    const month = dateStr.substring(2, 4);
-    const day = dateStr.substring(0, 2);
-    const dateObj = new Date(`${year}-${month}-${day}`);
-    return dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  useEffect(() => {
+    const fetchVideoData = async () => {
+      if (!videoId) {
+          setLoading(false);
+          return;
+      };
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('videos')
+        .select(`*, clients(profiles(full_name)), exercises(name)`)
+        .eq('id', videoId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching video data:", error);
+      } else {
+        setVideoData(data);
+      }
+      setLoading(false);
+    }
+    fetchVideoData();
+  }, [videoId]);
+
+  const displayData = videoData ? {
+      id: videoData.id,
+      title: `${videoData.exercises.name} - Análisis Biomecánico`,
+      client: videoData.clients.profiles.full_name,
+      exercise: videoData.exercises.name,
+      date: new Date(videoData.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+      url: videoData.video_url,
+      microciclo: `Microciclo ${videoData.microciclo || 'N/A'}`,
+      angle: videoData.angle || 'N/A',
+      weight: `${videoData.weight || 'N/A'}kg`,
+      reps: 'N/A' // Reps not in schema yet
+  } : {
+      id: "1",
+      title: "Cargando...",
+      client: "Cargando...",
+      exercise: "Cargando...",
+      date: "",
+      url: "",
+      microciclo: "",
+      angle: "",
+      weight: "",
+      reps: ""
   };
 
-  const mockVideoData: VideoData = {
-    id: "1", // This would likely come from the clientId or another source
-    title: `${decodeURIComponent(exercise)} - Análisis Biomecánico`,
-    client: decodeURIComponent(clientId),
-    exercise: decodeURIComponent(exercise),
-    date: formatDate(date),
-    duration: "1:12",
-    weight: "100kg",
-    reps: "6",
-    angle: "Sagital",
-    url: "https://www.youtube.com/embed/ultWZbUMPL8",
-    microciclo: "Microciclo 1", // As requested, hardcoded for now
-  };
-
-  const router = useRouter()
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(72)
@@ -100,6 +128,7 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
   ]
 
   const handleToolSelect = (toolId: string) => {
+    if (isReadOnly) return;
     setActiveTool(activeTool === toolId ? null : toolId as any)
   }
 
@@ -129,6 +158,14 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
+  if (loading) {
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-[#121212]">
+            <p className="text-white">Cargando Análisis...</p>
+        </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -148,19 +185,19 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
                 Volver
               </Button>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">{mockVideoData.title}</h1>
+                <h1 className="text-2xl font-bold text-foreground">{displayData.title}</h1>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                  <Link href={`/clients/${mockVideoData.id}`} className="flex items-center gap-1 hover:text-foreground">
+                  <Link href={`/clients/${displayData.id}`} className="flex items-center gap-1 hover:text-foreground">
                     <User className="h-4 w-4" />
-                    {mockVideoData.client}
+                    {displayData.client}
                   </Link>
                   <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
-                    {mockVideoData.date}
+                    {displayData.date}
                   </div>
                   <div className="flex items-center gap-1">
                     <Dumbbell className="h-4 w-4" />
-                    {mockVideoData.exercise}
+                    {displayData.exercise}
                   </div>
                 </div>
               </div>
@@ -168,13 +205,13 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
 
             <div className="flex items-center gap-3">
               <Badge variant="secondary" className="border-border text-foreground">
-                {mockVideoData.microciclo}
+                {displayData.microciclo}
               </Badge>
               <Badge variant="outline" className="border-border text-foreground">
-                {mockVideoData.angle}
+                {displayData.angle}
               </Badge>
               <Badge variant="outline" className="border-border text-foreground">
-                {mockVideoData.weight} x {mockVideoData.reps}
+                {displayData.weight} x {displayData.reps}
               </Badge>
             </div>
           </div>
@@ -189,7 +226,7 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
                     <div className="absolute inset-0" onClick={(e) => e.preventDefault()}>
                       <video
                         ref={videoRef}
-                        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" // Placeholder
+                        src={displayData.url}
                         className="w-full h-full object-contain"
                         muted
                         onTimeUpdate={() => {
@@ -211,33 +248,35 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
                       activeTool={activeTool}
                       videoRef={videoRef}
                       onAnnotationEnd={handleAnnotationEnd}
-                      className="absolute inset-0 z-10 pointer-events-auto"
+                      className={`absolute inset-0 z-10 ${isReadOnly ? 'pointer-events-none' : 'pointer-events-auto'}`}
                     />
 
                     {/* Biomechanical Tools */}
-                    <div className="absolute top-4 left-4 z-20">
-                      <div className="flex flex-col gap-2">
-                        {tools.map((tool) => {
-                          const Icon = tool.icon
-                          return (
-                            <Button
-                              key={tool.id}
-                              variant={activeTool === tool.id ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => handleToolSelect(tool.id)}
-                              className={`w-12 h-12 rounded-2xl border-border ${
-                                activeTool === tool.id
-                                  ? "bg-foreground text-background"
-                                  : "bg-background/80 backdrop-blur-sm text-foreground hover:bg-accent"
-                              }`}
-                              title={tool.label}
-                            >
-                              <Icon className="h-4 w-4" />
-                            </Button>
-                          )
-                        })}
+                    {!isReadOnly && (
+                      <div className="absolute top-4 left-4 z-20">
+                        <div className="flex flex-col gap-2">
+                          {tools.map((tool) => {
+                            const Icon = tool.icon
+                            return (
+                              <Button
+                                key={tool.id}
+                                variant={activeTool === tool.id ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => handleToolSelect(tool.id)}
+                                className={`w-12 h-12 rounded-2xl border-border ${
+                                  activeTool === tool.id
+                                    ? "bg-foreground text-background"
+                                    : "bg-background/80 backdrop-blur-sm text-foreground hover:bg-accent"
+                                }`}
+                                title={tool.label}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </Button>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Comment Toggle */}
                     <div className="absolute top-4 right-4 z-20">
@@ -259,6 +298,13 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
 
                   {/* Video Controls */}
                   <div className="p-4 bg-card border-t border-border">
+                    {isReadOnly && (
+                        <div className="mb-4 text-center">
+                            <Button size="lg" className="bg-green-600 hover:bg-green-700">
+                                Marcar como Entendido
+                            </Button>
+                        </div>
+                    )}
                     <div className="flex items-center gap-4">
                       <Button
                         variant="outline"
@@ -374,22 +420,22 @@ export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
                 </div>
 
                 {activeTab === "analysis" && (
-                  <CommentSystem videoId={mockVideoData.id} />
+                  <CommentSystem videoId={displayData.id} />
                 )}
 
                 {activeTab === "comments" && (
-                  <CommentSystem videoId={mockVideoData.id} />
+                  <CommentSystem videoId={displayData.id} />
                 )}
 
                 {activeTab === "comparison" && (
-                  <VideoComparison currentVideo={mockVideoData} />
+                  <VideoComparison currentVideo={displayData} />
                 )}
               </div>
             </div>
 
             {/* Sidebar */}
             <div className="xl:col-span-1">
-              <AnalysisTools />
+              <AnalysisTools videoId={displayData.id} />
             </div>
           </div>
         </div>

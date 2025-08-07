@@ -21,13 +21,17 @@ interface AngleMeasurement {
   angle: number
 }
 
+import { RefObject } from "react"
+
 interface DrawingCanvasProps {
   activeTool: string | null
+  videoRef: RefObject<HTMLVideoElement>
+  onAnnotationEnd: (type: 'draw' | 'angle' | 'text') => void
   className?: string
 }
 
 export const DrawingCanvas = forwardRef<HTMLCanvasElement, DrawingCanvasProps>(
-  ({ activeTool, className }, ref) => {
+  ({ activeTool, videoRef, onAnnotationEnd, className }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [isDrawing, setIsDrawing] = useState(false)
     const [paths, setPaths] = useState<DrawingPath[]>([])
@@ -38,20 +42,57 @@ export const DrawingCanvas = forwardRef<HTMLCanvasElement, DrawingCanvasProps>(
     useImperativeHandle(ref, () => canvasRef.current!)
 
     useEffect(() => {
-      const canvas = canvasRef.current
-      if (!canvas) return
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+
+      if (!canvas || !video) return;
 
       const resizeCanvas = () => {
-        const rect = canvas.getBoundingClientRect()
-        canvas.width = rect.width
-        canvas.height = rect.height
-        redrawCanvas()
+        const containerRect = canvas.parentElement!.getBoundingClientRect();
+        const videoRatio = video.videoWidth / video.videoHeight;
+        const containerRatio = containerRect.width / containerRect.height;
+
+        let newWidth, newHeight, newLeft, newTop;
+
+        if (videoRatio > containerRatio) {
+          // Video is wider than container (letterbox top/bottom)
+          newWidth = containerRect.width;
+          newHeight = newWidth / videoRatio;
+          newLeft = 0;
+          newTop = (containerRect.height - newHeight) / 2;
+        } else {
+          // Video is taller than container (letterbox left/right)
+          newHeight = containerRect.height;
+          newWidth = newHeight * videoRatio;
+          newTop = 0;
+          newLeft = (containerRect.width - newWidth) / 2;
+        }
+
+        canvas.style.width = `${newWidth}px`;
+        canvas.style.height = `${newHeight}px`;
+        canvas.style.left = `${newLeft}px`;
+        canvas.style.top = `${newTop}px`;
+
+        // Set canvas resolution
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+
+        redrawCanvas();
+      };
+
+      // Initial resize
+      if (video.readyState >= 1) { // HAVE_METADATA
+          resizeCanvas();
       }
 
-      resizeCanvas()
-      window.addEventListener("resize", resizeCanvas)
-      return () => window.removeEventListener("resize", resizeCanvas)
-    }, [])
+      video.addEventListener('loadedmetadata', resizeCanvas);
+      window.addEventListener('resize', resizeCanvas);
+
+      return () => {
+        video.removeEventListener('loadedmetadata', resizeCanvas);
+        window.removeEventListener('resize', resizeCanvas);
+      };
+    }, [videoRef]);
 
     const redrawCanvas = () => {
       const canvas = canvasRef.current
@@ -188,6 +229,7 @@ export const DrawingCanvas = forwardRef<HTMLCanvasElement, DrawingCanvasProps>(
           }
           setAngles((prev) => [...prev, newAngle])
           setAnglePoints([])
+          onAnnotationEnd('angle');
         }
       } else if (activeTool === "draw") {
         setIsDrawing(true)
@@ -223,6 +265,7 @@ export const DrawingCanvas = forwardRef<HTMLCanvasElement, DrawingCanvasProps>(
         }
         setPaths((prev) => [...prev, newPath])
         setCurrentPath([])
+        onAnnotationEnd('draw');
       }
       setIsDrawing(false)
     }

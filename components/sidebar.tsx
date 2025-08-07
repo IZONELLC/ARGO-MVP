@@ -12,7 +12,6 @@ const navigation = [
   { name: 'Clientes', href: '/clients', icon: Users },
   { name: 'Videos', href: '/videos', icon: Video },
   { name: 'Análisis', href: '/analysis', icon: BarChart3 },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Base de Datos', href: '/database', icon: Database },
   { name: 'Configuración', href: '/settings', icon: Settings },
 ]

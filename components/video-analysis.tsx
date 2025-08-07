@@ -1,8 +1,23 @@
 "use client"
 
+"use client"
+
 import { useState, useRef, useEffect } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { DrawingCanvas } from "@/components/drawing-canvas"
@@ -17,28 +32,51 @@ interface VideoData {
   title: string
   client: string
   exercise: string
-  date: string
+  date: string;
   duration: string
   weight: string
   reps: string
   angle: string
   url: string
+  microciclo: string
 }
 
-const mockVideoData: VideoData = {
-  id: "1",
-  title: "Sentadilla - Análisis Biomecánico",
-  client: "Carlos Rodriguez",
-  exercise: "Sentadilla",
-  date: "2024-01-22",
-  duration: "1:12",
-  weight: "100kg",
-  reps: "6",
-  angle: "Sagital",
-  url: "https://www.youtube.com/embed/ultWZbUMPL8",
+interface VideoAnalysisProps {
+  analysisParams: {
+    coachId: string
+    clientId: string
+    date: string
+    exercise: string
+  }
 }
 
-export function VideoAnalysis() {
+export function VideoAnalysis({ analysisParams }: VideoAnalysisProps) {
+  const { clientId, date, exercise } = analysisParams;
+
+  // Helper to format the date string (e.g., 22012024) to a readable format
+  const formatDate = (dateStr: string) => {
+    const year = dateStr.substring(4);
+    const month = dateStr.substring(2, 4);
+    const day = dateStr.substring(0, 2);
+    const dateObj = new Date(`${year}-${month}-${day}`);
+    return dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  };
+
+  const mockVideoData: VideoData = {
+    id: "1", // This would likely come from the clientId or another source
+    title: `${decodeURIComponent(exercise)} - Análisis Biomecánico`,
+    client: decodeURIComponent(clientId),
+    exercise: decodeURIComponent(exercise),
+    date: formatDate(date),
+    duration: "1:12",
+    weight: "100kg",
+    reps: "6",
+    angle: "Sagital",
+    url: "https://www.youtube.com/embed/ultWZbUMPL8",
+    microciclo: "Microciclo 1", // As requested, hardcoded for now
+  };
+
+  const router = useRouter()
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(72)
@@ -47,8 +85,11 @@ export function VideoAnalysis() {
   const [activeTab, setActiveTab] = useState<"analysis" | "comments" | "comparison">("analysis")
   const [activeTool, setActiveTool] = useState<"draw" | "erase" | "angle" | "text" | null>(null)
   const [showComments, setShowComments] = useState(false)
+  const [isTagDialogOpen, setIsTagDialogOpen] = useState(false)
+  const [annotations, setAnnotations] = useState<any[]>([])
+  const [currentAnnotationTag, setCurrentAnnotationTag] = useState("")
   
-  const videoRef = useRef<HTMLIFrameElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const tools = [
@@ -60,6 +101,26 @@ export function VideoAnalysis() {
 
   const handleToolSelect = (toolId: string) => {
     setActiveTool(activeTool === toolId ? null : toolId as any)
+  }
+
+  const handleAnnotationEnd = (type: string) => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+    // Here you could store more info about the annotation if needed
+    setIsTagDialogOpen(true);
+  }
+
+  const handleSaveTag = () => {
+    const newAnnotation = {
+      time: currentTime,
+      tag: currentAnnotationTag,
+      // you can add more data here, like the drawing path, etc.
+    };
+    setAnnotations([...annotations, newAnnotation]);
+    setCurrentAnnotationTag("");
+    setIsTagDialogOpen(false);
   }
 
   const formatTime = (seconds: number) => {
@@ -81,6 +142,7 @@ export function VideoAnalysis() {
                 variant="outline"
                 size="sm"
                 className="border-border text-foreground hover:bg-accent rounded-2xl"
+                onClick={() => router.back()}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Volver
@@ -88,10 +150,10 @@ export function VideoAnalysis() {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">{mockVideoData.title}</h1>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                  <div className="flex items-center gap-1">
+                  <Link href={`/clients/${mockVideoData.id}`} className="flex items-center gap-1 hover:text-foreground">
                     <User className="h-4 w-4" />
                     {mockVideoData.client}
-                  </div>
+                  </Link>
                   <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
                     {mockVideoData.date}
@@ -105,6 +167,9 @@ export function VideoAnalysis() {
             </div>
 
             <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="border-border text-foreground">
+                {mockVideoData.microciclo}
+              </Badge>
               <Badge variant="outline" className="border-border text-foreground">
                 {mockVideoData.angle}
               </Badge>
@@ -121,13 +186,22 @@ export function VideoAnalysis() {
                 <CardContent className="p-0">
                   <div className="relative aspect-video bg-black">
                     {/* Video Container */}
-                    <div className="absolute inset-0">
-                      <iframe
+                    <div className="absolute inset-0" onClick={(e) => e.preventDefault()}>
+                      <video
                         ref={videoRef}
-                        src={`${mockVideoData.url}?enablejsapi=1&controls=0&modestbranding=1&rel=0`}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
+                        src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" // Placeholder
+                        className="w-full h-full object-contain"
+                        muted
+                        onTimeUpdate={() => {
+                          if (videoRef.current) {
+                            setCurrentTime(videoRef.current.currentTime);
+                          }
+                        }}
+                        onLoadedMetadata={() => {
+                          if (videoRef.current) {
+                            setDuration(videoRef.current.duration);
+                          }
+                        }}
                       />
                     </div>
 
@@ -135,6 +209,8 @@ export function VideoAnalysis() {
                     <DrawingCanvas
                       ref={canvasRef}
                       activeTool={activeTool}
+                      videoRef={videoRef}
+                      onAnnotationEnd={handleAnnotationEnd}
                       className="absolute inset-0 z-10 pointer-events-auto"
                     />
 
@@ -187,7 +263,16 @@ export function VideoAnalysis() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setIsPlaying(!isPlaying)}
+                        onClick={() => {
+                          if (videoRef.current) {
+                            if (isPlaying) {
+                              videoRef.current.pause();
+                            } else {
+                              videoRef.current.play();
+                            }
+                            setIsPlaying(!isPlaying);
+                          }
+                        }}
                         className="border-border text-foreground hover:bg-accent rounded-2xl"
                       >
                         {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -197,8 +282,13 @@ export function VideoAnalysis() {
                         <Slider
                           value={[currentTime]}
                           max={duration}
-                          step={1}
-                          onValueChange={(value) => setCurrentTime(value[0])}
+                          step={0.1}
+                          onValueChange={(value) => {
+                            if (videoRef.current) {
+                              videoRef.current.currentTime = value[0];
+                              setCurrentTime(value[0]);
+                            }
+                          }}
                           className="w-full"
                         />
                         <div className="flex justify-between text-xs text-muted-foreground mt-1">
@@ -213,7 +303,14 @@ export function VideoAnalysis() {
                           value={[volume]}
                           max={100}
                           step={1}
-                          onValueChange={(value) => setVolume(value[0])}
+                          onValueChange={(value) => {
+                            const newVolume = value[0];
+                            setVolume(newVolume);
+                            if (videoRef.current) {
+                              videoRef.current.volume = newVolume / 100;
+                              videoRef.current.muted = newVolume === 0;
+                            }
+                          }}
                           className="w-20"
                         />
                       </div>
@@ -221,6 +318,11 @@ export function VideoAnalysis() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => {
+                          if (videoRef.current && document.fullscreenEnabled) {
+                            videoRef.current.requestFullscreen();
+                          }
+                        }}
                         className="border-border text-foreground hover:bg-accent rounded-2xl"
                       >
                         <Maximize className="h-4 w-4" />
@@ -272,37 +374,7 @@ export function VideoAnalysis() {
                 </div>
 
                 {activeTab === "analysis" && (
-                  <Card className="bg-card border-border">
-                    <CardContent className="p-6">
-                      <h3 className="text-lg font-semibold text-foreground mb-4">Análisis Biomecánico</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-3">
-                            <Target className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                          <h4 className="font-medium text-foreground">Técnica</h4>
-                          <p className="text-2xl font-bold text-foreground mt-1">85%</p>
-                          <p className="text-sm text-muted-foreground">Buena ejecución</p>
-                        </div>
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-3">
-                            <Weight className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                          <h4 className="font-medium text-foreground">Profundidad</h4>
-                          <p className="text-2xl font-bold text-foreground mt-1">92%</p>
-                          <p className="text-sm text-muted-foreground">Excelente</p>
-                        </div>
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-3">
-                            <RotateCw className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                          <h4 className="font-medium text-foreground">Estabilidad</h4>
-                          <p className="text-2xl font-bold text-foreground mt-1">78%</p>
-                          <p className="text-sm text-muted-foreground">Mejorable</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <CommentSystem videoId={mockVideoData.id} />
                 )}
 
                 {activeTab === "comments" && (
@@ -322,6 +394,34 @@ export function VideoAnalysis() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isTagDialogOpen} onOpenChange={setIsTagDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Añadir Etiqueta a la Anotación</DialogTitle>
+            <DialogDescription>
+              Ponle un título a esta corrección para que tu cliente la identifique rápidamente. Ej: "Pérdida de control".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="tag" className="text-right">
+                Etiqueta
+              </Label>
+              <Input
+                id="tag"
+                value={currentAnnotationTag}
+                onChange={(e) => setCurrentAnnotationTag(e.target.value)}
+                className="col-span-3"
+                placeholder="Ej: Más ancho de piernas"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" onClick={handleSaveTag}>Guardar Etiqueta</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
